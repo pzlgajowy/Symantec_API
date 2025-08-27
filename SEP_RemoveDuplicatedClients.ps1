@@ -156,6 +156,7 @@ foreach ($group in $duplicates) {
                 Invoke-RestMethod -Uri $deleteUrl -Method Delete -Headers $apiHeaders
                 Write-Host "    - SUCCESS: Client removed $($client.computerName)." -ForegroundColor DarkGreen -BackgroundColor Green
                 $totalDeletedCount++
+                # The API will execute 50 requests and then reject the next ones with error 429. To prevent this, the script waits 2 seconds after each request. 
                 sleep -Seconds 2
             }
             catch {

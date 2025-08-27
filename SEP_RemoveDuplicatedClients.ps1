@@ -1,11 +1,12 @@
 # =================================================================================
-# Skrypt PowerShell do usuwania zduplikowanych klientów SEPM przez REST API
-# Wersja: 1.0
+# PowerShell script for removing duplicate SEPM clients via REST API
 #
-# UWAGA: Uruchomienie tego skryptu może spowodować nieodwracalne zmiany w bazie
-# danych SEPM. Zawsze wykonuj kopię zapasową i testuj w środowisku deweloperskim.
-# USE FOR OWN RISK
+# WARNING: Running this script may cause irreversible changes to the SEPM database.
+# Always back up and test in a development environment.
+# 
+#            USE FOR OWN RISK
 # https://{{SEPM_server_address}}:8446/sepm/restapidocs.html
+# 
 # =================================================================================
 
 # ============== VARIABLES ==============
@@ -13,13 +14,13 @@
 $sepmServer = "{{SEPM_server_address}}"
 # Port API (domyślnie 8446)
 $sepmPort = 8446
-# Nazwa użytkownika administratora SEPM
+# SEPM administrators login
 $sepmUser = "$($env:USERNAME)"
 # Users password (leave blank for security reasons, script will ask for pass)
 $sepmPassword = ""
 
 # Dry Run - Set to $true to show what will be deleted
-# set to $false to REMOVE clients 
+# Set to $false to PERMANENTLY REMOVE clients
 [bool]$dryRun = $true
 #     $dryRun = $false
 
@@ -46,7 +47,7 @@ add-type @"
 "@
 [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 
-# --- KROK 1: UWIERZYTELNIENIE I POBRANIE TOKENA ---
+# --- STEP 1: AUTHENTICATION AND TOKEN DOWNLOAD ---
 
 if (-not $sepmPassword) {
     $sepmPassword = Read-Host -AsSecureString -Prompt "Logon as '$sepmUser'"
@@ -59,21 +60,21 @@ $headers = @{ "Content-Type" = "application/json" }
 $authBody = @{
     "username" = $sepmUser
     "password" = [System.Runtime.InteropServices.Marshal]::PtrToStringBSTR([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($sepmPassword))
-    "domain"   = "" # Pozostaw puste, jeśli używasz konta lokalnego SEPM
+    "domain"   = "" # Leave blank if you are using a local SEPM account
 } | ConvertTo-Json
 
-Write-Host "Krok 1: Uwierzytelnianie na serwerze $sepmServer..."
+Write-Host "Step 1: Authentication on the $sepmServer server..."
 try {
     $authResponse = Invoke-RestMethod -Uri $authUrl -Method Post -Headers $headers -Body $authBody
     $accessToken = $authResponse.token
-    Write-Host "Uwierzytelnianie pomyślne. Uzyskano token." -ForegroundColor Green
+    Write-Host "Authentication successful. Token obtained." -ForegroundColor Green
 }
 catch {
-    Write-Error "Błąd podczas uwierzytelniania: $($_.Exception.Message)"
+    Write-Error "Error while authenticating: $($_.Exception.Message)"
     exit
 }
 
-# --- KROK 2: POBRANIE LISTY WSZYSTKICH KLIENTÓW ---
+# --- STEP 2: DOWNLOAD THE LIST OF ALL CUSTOMERS ---
 
 $computersUrl = "$baseApiUrl/computers"
 $apiHeaders = @{
@@ -81,9 +82,9 @@ $apiHeaders = @{
     "Authorization" = "Bearer $accessToken"
 }
 
-Write-Host "Krok 2: Pobieranie listy wszystkich klientów... (może to potrwać dłuższą chwilę)"
+Write-Host "Step 2: Downloading a list of all clients... (this may take a while)"
 try {
-    # API zwraca dane stronnicowo, pętla 'do-while' pobierze wszystkie strony
+    # The API returns data in pages, the 'do-while' loop will fetch all pages
     $allClients = @()
     $pageIndex = 1
     do {
@@ -96,69 +97,69 @@ try {
         Write-Host -NoNewline "."
     } while ($pageResponse.totalElements -gt $allClients.Count)
     
-    Write-Host "`nPobrano łącznie $($allClients.Count) klientów." -ForegroundColor Green
+    Write-Host "`nA total of $($allClients.Count) clients were downloaded.." -ForegroundColor Green
 }
 catch {
-    Write-Error "Błąd podczas pobierania listy klientów: $($_.Exception.Message)"
+    Write-Error "Error while retrieving customer list: $($_.Exception.Message)"
     exit
 }
 
 
-# --- KROK 3: IDENTYFIKACJA DUPLIKATÓW ---
+# --- STEP 3: IDENTIFY DUPLICATES ---
 
-Write-Host "Krok 3: Analiza i identyfikacja duplikatów na podstawie nazwy klienta (Computer Name)..."
+Write-Host "Step 3: Analyze and identify duplicates based on the Client Name (Computer Name)..."
 
-# Grupujemy klientów po 'hardwareKey' i filtrujemy te grupy, które mają więcej niż jednego członka
-# $duplicates = $allClients | Group-Object -Property hardwareKey | Where-Object { $_.Count -gt 1 }
+# We group clients by 'hardwareKey' and filter those groups that have more than one member
+# $duplicates = $allClients | Group-Object -Property hardwareKey | Where-Object { $_.Count -gt 2 }
 
-# Grupujemy klientów po 'computerName' i filtrujemy te grupy, które mają więcej niż jednego członka
+# We group clients by 'computerName' and filter those groups that have more than one member
 $duplicates = $allClients | Group-Object -Property computerName | Where-Object { $_.Count -gt 2 }
 
 if ($duplicates.Count -eq 0) {
-    Write-Host "Nie znaleziono żadnych duplikatów. Kończenie pracy." -ForegroundColor Green
+    Write-Host "No duplicates found. Finishing work." -ForegroundColor Green
     exit
 }
 
-Write-Host "Znaleziono $($duplicates.Count) grup zduplikowanych klientów." -ForegroundColor Yellow
+Write-Host "A $($duplicates.Count) groups of duplicate clients found." -ForegroundColor Yellow
 
-# --- KROK 4 i 5: WYBÓR NAJNOWSZEGO I USUWANIE POZOSTAŁYCH ---
+# --- STEP 4 and 5: SELECT THE LATEST AND REMOVE THE REST ---
 
 if ($dryRun) {
-    Write-Host "[TRYB TESTOWY (Dry Run)] Skrypt tylko wyświetli, którzy klienci zostaliby usunięci." -ForegroundColor Cyan
+    Write-Host "[TEST MODE (Dry Run)] The script will only display which clients would be deleted." -ForegroundColor Cyan
 } else {
-    Write-Host "[TRYB RZECZYWISTY] Skrypt będzie usuwał zduplikowanych klientów!" -ForegroundColor Red -BackgroundColor White
+    Write-Host "[REAL MODE] The script will remove duplicate clients!" -ForegroundColor Red -BackgroundColor White
 }
 
 $totalDeletedCount = 0
 
 foreach ($group in $duplicates) {
     Write-Host "--------------------------------------------------------"
-    Write-Host "Analizowanie duplikatów dla klucza sprzętowego: $($group.Name)"
+    Write-Host "Analyzing duplicates by computer name: $($group.Name)"
     
-    # Sortujemy klientów w grupie po dacie ostatniego zameldowania, od najnowszego do najstarszego
+    # We sort clients in a group by their last check-in date, from newest to oldest
     $sortedClients = $group.Group | Sort-Object -Property agentTimeStamp -Descending
 
-    # Pierwszy na liście jest najnowszy - tego zostawiamy
+    # The first one on the list is the newest one - we'll leave that one alone
     $clientToKeep = $sortedClients | Select-Object -First 1
     
-    # Pozostali to duplikaty do usunięcia
+    # The rest are duplicates to be removed
     $clientsToDelete = $sortedClients | Select-Object -Skip 1
     
-    # Write-Host "  > Klient do pozostawienia: $($clientToKeep.computerName) (Ostatnie połączenie: $($clientToKeep.lastCheckinTime))" -ForegroundColor Green
-    Write-Host "  > Klient do pozostawienia: $($clientToKeep.computerName), CompID: $($clientToKeep.uniqueId), HWkey: $($clientToKeep.hardwareKey), (Ostatnie połączenie: $((ConvertFrom-UnixTime $clientToKeep.agentTimeStamp).datetime))" -ForegroundColor Green
+    # Write-Host "  > client to leave: $($clientToKeep.computerName) (lastConn: $($clientToKeep.lastCheckinTime))" -ForegroundColor Green
+    Write-Host "  > client to leave: $($clientToKeep.computerName), CompID: $($clientToKeep.uniqueId), HWkey: $($clientToKeep.hardwareKey), (lastConn: $((ConvertFrom-UnixTime $clientToKeep.agentTimeStamp).datetime))" -ForegroundColor Green
 
     foreach ($client in $clientsToDelete) {
-        Write-Host "  > Klient do USUNIĘCIA: $($client.computerName), CompID: $($client.uniqueId), HWkey: $($client.hardwareKey), Ostatnie połączenie: $((ConvertFrom-UnixTime $client.agentTimeStamp).datetime))" -ForegroundColor Yellow
+        Write-Host "  > client to REMOVE: $($client.computerName), CompID: $($client.uniqueId), HWkey: $($client.hardwareKey), lastConn: $((ConvertFrom-UnixTime $client.agentTimeStamp).datetime))" -ForegroundColor Yellow
         if (-not $dryRun) {
             $deleteUrl = "$computersUrl/$($client.uniqueId)"
             try {
                 Invoke-RestMethod -Uri $deleteUrl -Method Delete -Headers $apiHeaders
-                Write-Host "    - SUKCES: Usunięto klienta $($client.computerName)." -ForegroundColor DarkGreen -BackgroundColor Green
+                Write-Host "    - SUCCESS: Client removed $($client.computerName)." -ForegroundColor DarkGreen -BackgroundColor Green
                 $totalDeletedCount++
                 sleep -Seconds 2
             }
             catch {
-                Write-Host "    - BŁĄD: Nie udało się usunąć klienta $($client.computerName). Komunikat: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "    - ERROR: Failed to delete client $($client.computerName). Message: $($_.Exception.Message)" -ForegroundColor Red
                 exit
             }
         }
@@ -167,17 +168,17 @@ foreach ($group in $duplicates) {
 
 Write-Host "--------------------------------------------------------"
 if ($dryRun) {
-    Write-Host "Tryb testowy zakończony. Nie dokonano żadnych zmian." -ForegroundColor Cyan
+    Write-Host "Test mode completed. No changes made." -ForegroundColor Cyan
 } else {
-    Write-Host "Proces usuwania zakończony. Usunięto łącznie $totalDeletedCount klientów." -ForegroundColor Green
+    Write-Host "Deletion process completed. A total of $totalDeletedCount clients were deleted." -ForegroundColor Green
 }
 
-# --- KROK 6: WYLOGOWANIE (UNIEWAŻNIENIE TOKENA) ---
+# --- STEP 6: LOGOUT (INVALIDATE TOKEN) ---
 $logoutUrl = "$baseApiUrl/identity/logout"
 try {
     Invoke-RestMethod -Uri $logoutUrl -Method Post -Headers $apiHeaders
-    Write-Host "Token dostępu został unieważniony."
+    Write-Host "The access token has been invalidated."
 }
 catch {
-    Write-Warning "Nie udało się unieważnić tokena dostępu: $($_.Exception.Message)"
+    Write-Warning "Failed to revoke access token: $($_.Exception.Message)"
 }

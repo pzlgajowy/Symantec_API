@@ -1,13 +1,15 @@
 # =================================================================================
-# PowerShell script for removing duplicate SEPM clients via REST API
-#
-# WARNING: Running this script may cause irreversible changes to the SEPM database.
-# Always back up and test in a development environment.
+# Author:      Pawel Lesniewski
+# Created:     2025.08.27
+# Description: PowerShell script for removing duplicate SEPM clients via REST API
+# Version:     1.0
 # 
-#                   USE FOR OWN RISK
+# WARNING:     Running this script may cause irreversible changes to the SEPM database.
+#              Always back up and test in a development environment.
+# 
+#                   USE AT YOUR OWN RISK
 # 
 # https://{{SEPM_server_address}}:8446/sepm/restapidocs.html
-# 
 # =================================================================================
 
 # ============== VARIABLES ==============

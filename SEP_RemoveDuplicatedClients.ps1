@@ -160,6 +160,7 @@ foreach ($group in $duplicates) {
                 Write-Host "    - SUCCESS: Client removed $($client.computerName)." -ForegroundColor DarkGreen -BackgroundColor Green
                 $totalDeletedCount++
                 # The API will execute 50 requests and then reject the next ones with error 429. To prevent this, the script waits 1,3 seconds after each request. 
+                # https://knowledge.broadcom.com/external/article/174399/symantec-endpoint-protection-api-created.html
                 sleep -Milliseconds 1300
             }
             catch {

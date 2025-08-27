@@ -4,7 +4,8 @@
 # WARNING: Running this script may cause irreversible changes to the SEPM database.
 # Always back up and test in a development environment.
 # 
-#            USE FOR OWN RISK
+#                   USE FOR OWN RISK
+# 
 # https://{{SEPM_server_address}}:8446/sepm/restapidocs.html
 # 
 # =================================================================================
